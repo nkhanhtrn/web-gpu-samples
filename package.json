@@ -1,0 +1,11 @@
+{
+  "name": "web-gpu-sample",
+  "version": "1.0.0",
+  "description": "WebGPU sample project with simple static server",
+  "scripts": {
+    "start": "serve ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
