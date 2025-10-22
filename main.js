@@ -16,7 +16,49 @@ async function loadTexture(device, url) {
   );
   return texture;
 }
-// main.js - WebGPU Boilerplate
+async function createVertexBuffer(device) {
+  // Pack as array of vec4<f32>: [x, y, u, v] per vertex
+  // Separate position and UVs
+  const positions = new Float32Array([
+    0.0,  0.5,
+   -0.5, -0.5,
+    0.5, -0.5,
+  ]);
+  const colors = new Float32Array([
+    // r, g, b for each vertex
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0,
+  ]);
+  const uvs = new Float32Array([
+    // uv1.x, uv1.y for each vertex
+    0.5, 1.0,
+    0.0, 0.0,
+    1.0, 0.0,
+  ]);
+  const posBuffer = device.createBuffer({
+    size: positions.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(posBuffer.getMappedRange()).set(positions);
+  posBuffer.unmap();
+  const uvBuffer = device.createBuffer({
+    size: uvs.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(uvBuffer.getMappedRange()).set(uvs);
+  uvBuffer.unmap();
+  const colorBuffer = device.createBuffer({
+    size: colors.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(colorBuffer.getMappedRange()).set(colors);
+  colorBuffer.unmap();
+  return { posBuffer, uvBuffer, colorBuffer };
+}
 
 async function initWebGPU() {
   if (!navigator.gpu) {
@@ -71,24 +113,46 @@ async function drawTexturedSquare(device, context, format) {
   });
 
   // Load texture (wall.jpg)
+  const { posBuffer, uvBuffer, colorBuffer } = await createVertexBuffer(device);
   const texture1 = await loadTexture(device, 'wall.jpg');
-  const texture2 = await loadTexture(device, 'wall.jpg'); // second texture
   // Create bind group layout and pipeline layout
   const bindGroupLayout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-      { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} }, // second texture
     ],
   });
   const pipelineLayout = device.createPipelineLayout({
     bindGroupLayouts: [bindGroupLayout],
   });
 
-  // Create pipeline (no multisampling)
+  // Create pipeline with two vertex buffer layouts
   const pipeline = device.createRenderPipeline({
     layout: pipelineLayout,
-    vertex: { module, entryPoint: 'vs_main' },
+    vertex: {
+      module,
+      entryPoint: 'vs_main',
+      buffers: [
+        {
+          arrayStride: 8, // 2 floats * 4 bytes
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: 'float32x2' }, // position
+          ],
+        },
+        {
+          arrayStride: 8, // 2 floats * 4 bytes
+          attributes: [
+            { shaderLocation: 1, offset: 0, format: 'float32x2' }, // uv1
+          ],
+        },
+        {
+          arrayStride: 12, // 3 floats * 4 bytes
+          attributes: [
+            { shaderLocation: 2, offset: 0, format: 'float32x3'}, // color
+          ]
+        }
+      ],
+    },
     fragment: { module, entryPoint: 'fs_main', targets: [{ format }] },
     primitive: { topology: 'triangle-list' },
   });
@@ -99,7 +163,6 @@ async function drawTexturedSquare(device, context, format) {
     entries: [
       { binding: 0, resource: sampler },
       { binding: 1, resource: texture1.createView() },
-      { binding: 2, resource: texture2.createView() },
     ],
   });
 
@@ -116,6 +179,9 @@ async function drawTexturedSquare(device, context, format) {
   });
   renderPass.setPipeline(pipeline);
   renderPass.setBindGroup(0, bindGroup);
+  renderPass.setVertexBuffer(0, posBuffer);
+  renderPass.setVertexBuffer(1, uvBuffer);
+  renderPass.setVertexBuffer(2, colorBuffer);
   renderPass.draw(3, 1, 0, 0);
   renderPass.end();
   device.queue.submit([commandEncoder.finish()]);
