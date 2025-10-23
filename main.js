@@ -60,6 +60,14 @@ async function createVertexBuffer(device) {
   return { posBuffer, uvBuffer, colorBuffer };
 }
 
+// Create a uniform buffer for rotation angle
+async function createRotationBuffer(device) {
+  return device.createBuffer({
+    size: 4,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+}
+
 async function initWebGPU() {
   if (!navigator.gpu) {
     alert('WebGPU is not supported in this browser.');
@@ -95,6 +103,9 @@ async function clearColor(device, context) {
   });
   renderPass.end();
   device.queue.submit([commandEncoder.finish()]);
+  if (window.stopTriangleAnimation) {
+    window.stopTriangleAnimation();
+  }
 }
 
 // Draw a colored triangle using WebGPU
@@ -115,11 +126,15 @@ async function drawTexturedSquare(device, context, format) {
   // Load texture (wall.jpg)
   const { posBuffer, uvBuffer, colorBuffer } = await createVertexBuffer(device);
   const texture1 = await loadTexture(device, 'wall.jpg');
+  // Create uniform buffer for rotation
+  const rotationBuffer = await createRotationBuffer(device);
+
   // Create bind group layout and pipeline layout
   const bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, sampler: {} },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.VERTEX, texture: {} },
+      { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
     ],
   });
   const pipelineLayout = device.createPipelineLayout({
@@ -163,28 +178,48 @@ async function drawTexturedSquare(device, context, format) {
     entries: [
       { binding: 0, resource: sampler },
       { binding: 1, resource: texture1.createView() },
+      { binding: 2, resource: { buffer: rotationBuffer } },
     ],
   });
 
-  // Render pass (single-sample)
-  const commandEncoder = device.createCommandEncoder();
-  const textureView = context.getCurrentTexture().createView();
-  const renderPass = commandEncoder.beginRenderPass({
-    colorAttachments: [{
-      view: textureView,
-      clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
-      loadOp: 'clear',
-      storeOp: 'store',
-    }],
-  });
-  renderPass.setPipeline(pipeline);
-  renderPass.setBindGroup(0, bindGroup);
-  renderPass.setVertexBuffer(0, posBuffer);
-  renderPass.setVertexBuffer(1, uvBuffer);
-  renderPass.setVertexBuffer(2, colorBuffer);
-  renderPass.draw(3, 1, 0, 0);
-  renderPass.end();
-  device.queue.submit([commandEncoder.finish()]);
+  let rotation = 0;
+  let frameId;
+  // Cancel any previous animation frame before starting a new one
+  if (window.stopTriangleAnimation) {
+    window.stopTriangleAnimation();
+  }
+  function frame() {
+    rotation += 0.01;
+    device.queue.writeBuffer(rotationBuffer, 0, new Float32Array([rotation]));
+    const commandEncoder = device.createCommandEncoder();
+    const textureView = context.getCurrentTexture().createView();
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    renderPass.setPipeline(pipeline);
+    renderPass.setBindGroup(0, bindGroup);
+    renderPass.setVertexBuffer(0, posBuffer);
+    renderPass.setVertexBuffer(1, uvBuffer);
+    renderPass.setVertexBuffer(2, colorBuffer);
+    renderPass.draw(3, 1, 0, 0);
+    renderPass.end();
+    device.queue.submit([commandEncoder.finish()]);
+    frameId = requestAnimationFrame(frame);
+  }
+  frame();
+
+  // Expose a stop function to cancel animation
+  window.stopTriangleAnimation = () => {
+    if (frameId) {
+      cancelAnimationFrame(frameId);
+      frameId = null;
+    }
+  };
 }
 
 // Main logic
