@@ -1,22 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=640, initial-scale=1.0">
-  <title>WebGPU Boilerplate</title>
-  <style>
-    body { background: #222; color: #eee; font-family: sans-serif; }
-    #webgpu-canvas { display: block; margin: 2em auto; background: #111; }
-    #controls { text-align: center; margin-top: 1em; }
-  </style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>WebGPU Sample</title>
+	<style>
+		body { margin: 0; background: #222; color: #eee; font-family: sans-serif; }
+		canvas { display: block; margin: 2em auto; background: #111; border-radius: 8px; }
+		#error { color: #ff5555; text-align: center; margin-top: 2em; }
+	</style>
 </head>
 <body>
-  <h1 style="text-align:center">WebGPU Boilerplate</h1>
-  <canvas id="webgpu-canvas" width="640" height="480"></canvas>
-  <div id="controls">
-    <button id="clear-btn">Clear Color</button>
-    <button id="triangle-btn">Draw Triangle</button>
-  </div>
-  <script type="module" src="main.js"></script>
+	<h1 style="text-align:center;">WebGPU Boilerplate</h1>
+	<canvas id="gpu-canvas" width="640" height="480"></canvas>
+	<div id="error"></div>
+	<script type="module" src="main.js"></script>
 </body>
 </html>
