@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "WebGPU sample project with simple static server",
   "scripts": {
-    "start": "serve ."
+    "start": "serve .",
+    "deploy": "./deploy.sh"
   },
   "devDependencies": {
     "serve": "^14.2.0"
