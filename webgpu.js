@@ -1,5 +1,40 @@
+// Creates a bind group and layout for location, sampler, and texture
+export function createBindGroupsAndLayouts(device, locationBuffer, sampler, texture) {
+    // Group 0: location buffer
+    const locationBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+        ],
+    });
+    const locationBindGroup = device.createBindGroup({
+        layout: locationBindGroupLayout,
+        entries: [
+            { binding: 0, resource: { buffer: locationBuffer } },
+        ],
+    });
+
+    // Group 1: sampler and texture
+    const textureBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        ],
+    });
+    const textureBindGroup = device.createBindGroup({
+        layout: textureBindGroupLayout,
+        entries: [
+            { binding: 0, resource: sampler },
+            { binding: 1, resource: texture.createView() },
+        ],
+    });
+
+    return {
+        bindGroups: [locationBindGroup, textureBindGroup],
+        bindGroupLayouts: [locationBindGroupLayout, textureBindGroupLayout]
+    };
+}
 // Loads an image and creates a WebGPU texture
-export async function loadTexture(device, url) {
+export async function createTexture(device, url) {
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`Failed to load texture: ${url}`);
@@ -18,6 +53,16 @@ export async function loadTexture(device, url) {
     );
     return texture;
 }
+
+export async function createSampler(device) {
+    return device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+        addressModeU: 'repeat',
+        addressModeV: 'repeat'
+    });
+}
+
 // Initializes WebGPU and returns device, context, format
 export async function createWebGPU(canvas, errorDiv) {
     if (!navigator.gpu) {
@@ -39,14 +84,24 @@ export async function createWebGPU(canvas, errorDiv) {
     });
     return { device, context, format };
 }
+export function getSizeInPixels(x, y, screenWidth, screenHeight) {
+    let pixelX = x / 2 * screenWidth;
+    let pixelY = y / 2 * screenHeight;
+    return { pixelX, pixelY };
+}
 
+export function getLocationInPixels(x, y, screenWidth, screenHeight) {
+    let pixelX = ((x + 1) / 2) * screenWidth;
+    let pixelY = ((1 - y) / 2) * screenHeight;
+    return { pixelX, pixelY };
+}
 // Creates a vertex buffer for a triangle
-export function createVertexBuffer(device) {
+export function createVertexBuffer(device, startX, startY, width, height) {
     const vertexData = new Float32Array([
-        -0.3,  0.2,
-         0.3,  0.2,
-        -0.3, -0.2,
-         0.3, -0.2,
+           startX,         startY,          0.0, 0.0,
+           startX + width, startY,          1.0, 0.0,
+           startX,         startY - height, 0.0, 1.0,
+           startX + width, startY - height, 1.0, 1.0
     ]);
     const vertexBuffer = device.createBuffer({
         size: vertexData.byteLength,
@@ -59,21 +114,29 @@ export function createVertexBuffer(device) {
 }
 
 // Loads WGSL shader and creates a pipeline
-export async function createPipeline(device, format) {
+export async function createPipeline(device, format, bindGroupLayouts) {
     const shaderCode = await fetch('dvd.wgsl').then(res => res.text());
     const shaderModule = device.createShaderModule({ code: shaderCode });
+    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts });
     const pipeline = device.createRenderPipeline({
-        layout: 'auto',
+        layout: pipelineLayout,
         vertex: {
             module: shaderModule,
             entryPoint: 'vs_main',
             buffers: [{
-                arrayStride: Float32Array.BYTES_PER_ELEMENT * 2,
-                attributes: [{
-                    shaderLocation: 0,
-                    offset: 0,
-                    format: 'float32x2',
-                }],
+                arrayStride: Float32Array.BYTES_PER_ELEMENT * 4, // 2 for position, 2 for uv
+                attributes: [
+                    {
+                        shaderLocation: 0,
+                        offset: 0,
+                        format: 'float32x2', // position
+                    },
+                    {
+                        shaderLocation: 1,
+                        offset: Float32Array.BYTES_PER_ELEMENT * 2,
+                        format: 'float32x2', // uv
+                    }
+                ],
             }],
         },
         fragment: {
@@ -85,9 +148,7 @@ export async function createPipeline(device, format) {
             topology: 'triangle-strip',
         },
     });
-    // Create bind group layout and bind group for locationBuffer
-    const bindGroupLayout = pipeline.getBindGroupLayout(0);
-    return { pipeline, bindGroupLayout };
+    return pipeline;
 }
 
 export function createLocationBuffer(device) {
@@ -102,7 +163,7 @@ export function updateLocationBuffer(device, buffer, data) {
     device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
 }
 // Renders a square using locationBuffer
-export function render(device, context, pipelineObj, vertexBuffer, locationBuffer) {
+export function render(device, context, pipeline, vertexBuffer, bindGroups) {
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
         colorAttachments: [{
@@ -112,14 +173,11 @@ export function render(device, context, pipelineObj, vertexBuffer, locationBuffe
             storeOp: 'store',
         }],
     });
-    pass.setPipeline(pipelineObj.pipeline);
+    pass.setPipeline(pipeline);
     pass.setVertexBuffer(0, vertexBuffer);
-    const bindGroup = device.createBindGroup({
-        layout: pipelineObj.bindGroupLayout,
-        entries: [{ binding: 0, resource: { buffer: locationBuffer } }],
-    });
-    pass.setBindGroup(0, bindGroup);
-    pass.draw(4);
+    pass.setBindGroup(0, bindGroups[0]);
+    pass.setBindGroup(1, bindGroups[1]);
+    pass.draw(4, 1, 0, 0);
     pass.end();
     device.queue.submit([encoder.finish()]);
 }
