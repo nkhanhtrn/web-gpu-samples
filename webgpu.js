@@ -1,15 +1,17 @@
 // Creates a bind group and layout for location, sampler, and texture
-export function createBindGroupsAndLayouts(device, locationBuffer, sampler, texture) {
-    // Group 0: location buffer
+export function createBindGroupsAndLayouts(device, locationBuffer, sampler, texture, colorBuffer) {
+    // Group 0: location buffer and color buffer
     const locationBindGroupLayout = device.createBindGroupLayout({
         entries: [
             { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
         ],
     });
     const locationBindGroup = device.createBindGroup({
         layout: locationBindGroupLayout,
         entries: [
             { binding: 0, resource: { buffer: locationBuffer } },
+            { binding: 1, resource: { buffer: colorBuffer } },
         ],
     });
 
@@ -33,6 +35,22 @@ export function createBindGroupsAndLayouts(device, locationBuffer, sampler, text
         bindGroupLayouts: [locationBindGroupLayout, textureBindGroupLayout]
     };
 }
+
+// Creates a color uniform buffer
+export function createColorBuffer(device) {
+    return device.createBuffer({
+        size: 16, // 4 * 4 bytes for vec4<f32>
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: false,
+    });
+}
+
+export function updateColorBuffer(device, buffer, colorArr) {
+    // Always send 4 floats
+    const arr = colorArr.length === 4 ? colorArr : [...colorArr, 1.0];
+    device.queue.writeBuffer(buffer, 0, new Float32Array(arr).buffer);
+}
+
 // Loads an image and creates a WebGPU texture
 export async function createTexture(device, url) {
     const response = await fetch(url);

@@ -1,7 +1,11 @@
 struct LocUniform {
     offset: vec2<f32>
 };
+struct ColorUniform {
+    color: vec4<f32>
+};
 @group(0) @binding(0) var<uniform> loc: LocUniform;
+@group(0) @binding(1) var<uniform> colorUni: ColorUniform;
 
 struct VertexOut {
     @builtin(position)position: vec4<f32>,
@@ -21,7 +25,8 @@ fn vs_main(@location(0) position : vec2<f32>, @location(1) uv : vec2<f32>) ->  V
 // Fragment shader
 @fragment
 fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-    var color = textureSample(dvdTexture, dvdSampler, uv);
-    //return vec4<f32>(0.2, 0.3, 0.4, 1.0);
-    return color;
+    var texColor = textureSample(dvdTexture, dvdSampler, uv);
+    // Modulate texture color with uniform color
+    let outColor = colorUni.color * texColor;
+    return outColor;
 }
